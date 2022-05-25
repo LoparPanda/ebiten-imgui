@@ -6,6 +6,15 @@ import (
 	"github.com/inkyblackness/imgui-go/v4"
 )
 
+var modKeys = []ebiten.Key{
+	ebiten.KeyControlLeft,
+	ebiten.KeyControlRight,
+	ebiten.KeyAltLeft,
+	ebiten.KeyAltRight,
+	ebiten.KeyShiftLeft,
+	ebiten.KeyShiftRight,
+}
+
 var keys = map[int]int{
 	imgui.KeyTab:        int(ebiten.KeyTab),
 	imgui.KeyLeftArrow:  int(ebiten.KeyLeft),
@@ -31,24 +40,6 @@ var keys = map[int]int{
 }
 
 func sendInput(io *imgui.IO, inputChars []rune) []rune {
-
-	// Ebiten hides the LeftAlt RightAlt implementation (inside the uiDriver()), so
-	// here only the left alt is sent
-	if ebiten.IsKeyPressed(ebiten.KeyAlt) {
-		io.KeyAlt(1, 0)
-	} else {
-		io.KeyAlt(0, 0)
-	}
-	if ebiten.IsKeyPressed(ebiten.KeyShift) {
-		io.KeyShift(1, 0)
-	} else {
-		io.KeyShift(0, 0)
-	}
-	if ebiten.IsKeyPressed(ebiten.KeyControl) {
-		io.KeyCtrl(1, 0)
-	} else {
-		io.KeyCtrl(0, 0)
-	}
 	// TODO: get KeySuper somehow (GLFW: KeyLeftSuper    = Key(343), R: 347)
 	inputChars = ebiten.AppendInputChars(inputChars)
 	if len(inputChars) > 0 {
@@ -63,5 +54,16 @@ func sendInput(io *imgui.IO, inputChars []rune) []rune {
 			io.KeyRelease(iv)
 		}
 	}
+	for _, iv := range modKeys {
+		if inpututil.IsKeyJustPressed(iv) {
+			io.KeyPress(int(iv))
+		}
+		if inpututil.IsKeyJustReleased(iv) {
+			io.KeyRelease(int(iv))
+		}
+	}
+	io.KeyAlt(int(ebiten.KeyAltLeft), int(ebiten.KeyAltRight))
+	io.KeyShift(int(ebiten.KeyShiftLeft), int(ebiten.KeyShiftRight))
+	io.KeyCtrl(int(ebiten.KeyControlLeft), int(ebiten.KeyControlRight))
 	return inputChars
 }
