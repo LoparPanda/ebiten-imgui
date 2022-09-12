@@ -10,6 +10,9 @@ import (
 	"github.com/inkyblackness/imgui-go/v4"
 )
 
+// From graphics.IndicesCount
+const maxIndices = (1 << 16) / 3 * 3
+
 // struct ImDrawVert
 // {
 //     ImVec2  pos; // 2 floats
@@ -120,9 +123,9 @@ func getTexture(tex *imgui.RGBA32Image) *ebiten.Image {
 	// as srcPix points right into an imgui-owned data structure.
 	for i := 0; i < n; i++ {
 		alpha := uint16(srcPix[4*i+3])
-		pix[4*i] = uint8((uint16(srcPix[4*i]) * alpha + 127) / 255)
-		pix[4*i+1] = uint8((uint16(srcPix[4*i+1]) * alpha + 127) / 255)
-		pix[4*i+2] = uint8((uint16(srcPix[4*i+2]) * alpha + 127) / 255)
+		pix[4*i] = uint8((uint16(srcPix[4*i])*alpha + 127) / 255)
+		pix[4*i+1] = uint8((uint16(srcPix[4*i+1])*alpha + 127) / 255)
+		pix[4*i+2] = uint8((uint16(srcPix[4*i+2])*alpha + 127) / 255)
 		pix[4*i+3] = uint8(alpha)
 	}
 	img := ebiten.NewImage(tex.Width, tex.Height)
@@ -197,21 +200,30 @@ func render(target *ebiten.Image, mask *ebiten.Image, drawData imgui.DrawData, t
 			if cmd.HasUserCallback() {
 				cmd.CallUserCallback(clist)
 			} else {
-				clipRect := cmd.ClipRect()
-				texid := cmd.TextureID()
-				tx := txcache.GetTexture(texid)
-				vmultiply(vertices, vbuf, tx.Bounds().Min, tx.Bounds().Max)
-				if mask == nil || (clipRect.X == 0 && clipRect.Y == 0 && clipRect.Z == float32(targetw) && clipRect.W == float32(targeth)) {
-					target.DrawTriangles(vbuf, indices[indexBufferOffset:indexBufferOffset+ecount], tx, opt)
-				} else {
-					mask.Clear()
-					opt2.GeoM.Reset()
-					opt2.GeoM.Translate(float64(clipRect.X), float64(clipRect.Y))
-					mask.DrawTriangles(vbuf, indices[indexBufferOffset:indexBufferOffset+ecount], tx, opt)
-					target.DrawImage(mask.SubImage(image.Rectangle{
-						Min: image.Pt(int(clipRect.X), int(clipRect.Y)),
-						Max: image.Pt(int(clipRect.Z), int(clipRect.W)),
-					}).(*ebiten.Image), opt2)
+				cmdIndices := indices[indexBufferOffset : indexBufferOffset+ecount]
+				// Split draw calls into groups based on Ebitengine's index limits.
+				for i := 0; i < len(cmdIndices); i += maxIndices {
+					iend := i + maxIndices
+					if iend > len(cmdIndices) {
+						iend = len(cmdIndices)
+					}
+					subIndices := cmdIndices[i:iend]
+					clipRect := cmd.ClipRect()
+					texid := cmd.TextureID()
+					tx := txcache.GetTexture(texid)
+					vmultiply(vertices, vbuf, tx.Bounds().Min, tx.Bounds().Max)
+					if mask == nil || (clipRect.X == 0 && clipRect.Y == 0 && clipRect.Z == float32(targetw) && clipRect.W == float32(targeth)) {
+						target.DrawTriangles(vbuf, subIndices, tx, opt)
+					} else {
+						mask.Clear()
+						opt2.GeoM.Reset()
+						opt2.GeoM.Translate(float64(clipRect.X), float64(clipRect.Y))
+						mask.DrawTriangles(vbuf, subIndices, tx, opt)
+						target.DrawImage(mask.SubImage(image.Rectangle{
+							Min: image.Pt(int(clipRect.X), int(clipRect.Y)),
+							Max: image.Pt(int(clipRect.Z), int(clipRect.W)),
+						}).(*ebiten.Image), opt2)
+					}
 				}
 			}
 			indexBufferOffset += ecount
